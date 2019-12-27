@@ -18,6 +18,6 @@ struct Version: Command {
   }
 
   func run(with arguments: ArgumentParser.Result) throws {
-    print("0.0.1+streamlayer")
+    print("0.0.3+streamlayer")
   }
 }
