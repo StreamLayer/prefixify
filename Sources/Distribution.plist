@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+    <pkg-ref id="com.streamlayer.prefixify"/>
+    <domains enable_localSystem="true" enable_anywhere="true" enable_currentUserHome="false" />
+    <options customize="never" require-scripts="false"/>
+    <volume-check>
+        <allowed-os-versions>
+            <os-version min="10.10"/>
+        </allowed-os-versions>
+    </volume-check>
+    <choices-outline>
+        <line choice="default">
+            <line choice="com.streamlayer.prefixify"/>
+        </line>
+    </choices-outline>
+    <choice id="default"/>
+    <choice id="com.streamlayer.prefixify" visible="false">
+        <pkg-ref id="com.streamlayer.prefixify"/>
+    </choice>
+    <pkg-ref id="com.streamlayer.prefixify" version="1.0.0" onConclusion="none">SLRApp.pkg</pkg-ref>
+</installer-gui-script>
