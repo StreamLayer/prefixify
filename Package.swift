@@ -21,7 +21,7 @@ let package = Package(
   ],
   targets: [
     .target(name: "StreamLayerify",
-            dependencies: ["SwiftSyntax", "SwiftPM", "Path"],
+            dependencies: ["SwiftSyntax", "SwiftPM-auto", "Path"],
             path: "Sources/")
   ],
   swiftLanguageVersions: [.version("5")]
