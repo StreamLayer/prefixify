@@ -138,6 +138,10 @@ class SLRPublicRewriter: SyntaxRewriter {
     if identifiers.contains(node) {
       return super.visit(token.withKind(.identifier(prefix + node)))
     }
+    
+    if imports.contains(node) {
+      return super.visit(token.withKind(.identifier(prefix + node)))
+    }
 
     return super.visit(token)
   }
@@ -163,42 +167,51 @@ class SLRPublicRewriter: SyntaxRewriter {
   }
 }
 
-func rewrite(_ urls: [URL], prefix: String, reports: [SLRIdentifiersReport]? = nil) throws
-  -> (syntax: [Syntax], identifiers: Set<String>, fnReplace: Set<SLRFuncReport>) {
-  var sources = [SourceFileSyntax]()
-  var response = [Syntax]()
-  var syntaxVisitor = FindPublicAndOpenExports()
-
-  for url in urls {
-    let sourceFile = try SyntaxParser.parse(url)
-    sourceFile.walk(&syntaxVisitor)
-    sources.append(sourceFile)
-  }
-
-  // removes exclusions
-  syntaxVisitor.fnReplace = syntaxVisitor.fnReplace.filter {
-    !syntaxVisitor.exclude.contains($0.identifier)
-  }
-
-  let baseRewriter = SLRPublicRewriter(ids: syntaxVisitor.replace,
-                                       prefix: prefix,
-                                       fnIdentifiers: syntaxVisitor.fnReplace,
-                                       imports: [])
-
-  let rewriters = reports?.reduce(into: [baseRewriter], { res, rep in
-    res.append(SLRPublicRewriter(ids: Set(rep.identifiers),
-                                 prefix: rep.prefix,
-                                 fnIdentifiers: Set(rep.fnReplace),
-                                 imports: rep.products ?? []))
-  }) ?? [baseRewriter]
-
-  for idx in urls.indices {
-    let sourceFile = sources[idx]
-    let syntax = rewriters.reduce(sourceFile) { source, rewriter in
-      return rewriter.visit(source)
+func rewrite(
+  _ urls: [URL],
+  prefix: String,
+  reports: [SLRIdentifiersReport]? = nil,
+  exclude: [String]? = nil,
+  products: [String]? = nil
+) throws -> (syntax: [Syntax], identifiers: Set<String>, fnReplace: Set<SLRFuncReport>) {
+    var sources = [SourceFileSyntax]()
+    var response = [Syntax]()
+    var syntaxVisitor = FindPublicAndOpenExports()
+ 
+    if let exclude = exclude {
+      syntaxVisitor.exclude.formUnion(exclude)
     }
-    response.insert(syntax, at: idx)
-  }
 
-  return (response, syntaxVisitor.replace, syntaxVisitor.fnReplace)
+    for url in urls {
+      let sourceFile = try SyntaxParser.parse(url)
+      sourceFile.walk(&syntaxVisitor)
+      sources.append(sourceFile)
+    }
+
+    // removes exclusions
+    syntaxVisitor.fnReplace = syntaxVisitor.fnReplace.filter {
+      !syntaxVisitor.exclude.contains($0.identifier)
+    }
+
+    let baseRewriter = SLRPublicRewriter(ids: syntaxVisitor.replace,
+                                         prefix: prefix,
+                                         fnIdentifiers: syntaxVisitor.fnReplace,
+                                         imports: products ?? [])
+
+    let rewriters = reports?.reduce(into: [baseRewriter], { res, rep in
+      res.append(SLRPublicRewriter(ids: Set(rep.identifiers),
+                                   prefix: rep.prefix,
+                                   fnIdentifiers: Set(rep.fnReplace),
+                                   imports: rep.products ?? []))
+    }) ?? [baseRewriter]
+
+    for idx in urls.indices {
+      let sourceFile = sources[idx]
+      let syntax = rewriters.reduce(sourceFile) { source, rewriter in
+        return rewriter.visit(source)
+      }
+      response.insert(syntax, at: idx)
+    }
+
+    return (response, syntaxVisitor.replace, syntaxVisitor.fnReplace)
 }

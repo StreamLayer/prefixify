@@ -23,6 +23,7 @@ struct Rewrite: Command {
   private let includes: OptionArgument<[String]>
   private let inplace: OptionArgument<Bool>
   private let products: OptionArgument<[String]>
+  private let exclude: OptionArgument<[String]>
 
   init(parser: ArgumentParser) {
     let parser = parser.add(subparser: command, overview: overview)
@@ -61,6 +62,11 @@ struct Rewrite: Command {
                           shortName: "-n",
                           kind: [String].self,
                           usage: "adds product names in the reports")
+    
+    exclude = parser.add(option: "--exclude",
+                         shortName: "-e",
+                         kind: [String].self,
+                        usage: "exclude identifiers to be transformed")
   }
 
   func run(with arguments: ArgumentParser.Result) throws {
@@ -69,6 +75,8 @@ struct Rewrite: Command {
     let prefix = arguments.get(self.prefix)!
     let includes = arguments.get(self.includes)
     let inplace = arguments.get(self.inplace) ?? false
+    let exclude = arguments.get(self.exclude) ?? []
+    let productNames = arguments.get(self.products) ?? []
 
     guard let inputDir = Path(input), inputDir.isDirectory else {
       throw NSError(domain: "E_DIR_IN", code: 404, userInfo: ["path": input])
@@ -106,7 +114,7 @@ struct Rewrite: Command {
 
     let paths = inputDir.find().extension("swift").type(.file).map { $0 }
     let urls = paths.map { $0.url }
-    let processed = try rewrite(urls, prefix: prefix, reports: reports)
+    let processed = try rewrite(urls, prefix: prefix, reports: reports, exclude: exclude, products: productNames)
 
     for (idx, syntax) in processed.syntax.enumerated() {
       let path = paths[idx]
@@ -118,7 +126,6 @@ struct Rewrite: Command {
 
     if let identifiersReport = arguments.get(self.report) {
       let reportFile = Path(identifiersReport) ?? Path.cwd/identifiersReport
-      let productNames = arguments.get(self.products) ?? []
       let report = SLRIdentifiersReport(prefix: prefix,
                                         identifiers: Array(processed.identifiers),
                                         fnReplace: Array(processed.fnReplace),
