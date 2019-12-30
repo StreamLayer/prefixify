@@ -9,13 +9,37 @@ import SwiftSyntax
 import Basic
 import Foundation
 
+struct SLRFuncReport: Codable, Hashable {
+  let identifier: String
+  let signature: String
+}
+
 struct SLRIdentifiersReport: Codable {
-  let prefix: String;
-  let identifiers: [String];
+  let prefix: String
+  let identifiers: [String]
+  let fnReplace: [SLRFuncReport]
 }
 
 class FindPublicAndOpenExports: SyntaxVisitorBase {
   var replace = Set<String>()
+
+  /// contains list of standard operators, rest will be discovered and added to exclusions
+  /// https://github.com/apple/swift/blob/swift-5.1.3-RELEASE/stdlib/public/core/Policy.swift
+  var exclude = Set<String>([
+    "++", "--", "...", "!",
+    "~", "+", "-", "..<",
+    "<<", "&<<", ">>", "&>>",
+    "*", "&*", "/", "%", "&",
+    "&+", "&-", "|", "^",
+    "<", "<=", ">", ">=", "==", "!=", "===", "!==", "~=",
+    "&&", "||",
+    "*=", "&*=", "/=", "%=",
+    "+=", "&+=", "-=", "&-=",
+    "<<=", "&<<=", ">>=", "&>>=",
+    "&=", "^=", "|=", "~>"
+  ])
+
+  var fnReplace = Set<SLRFuncReport>()
 
   private func isPublic(_ mod: DeclModifierSyntax) -> Bool {
     if mod.name.tokenKind == .publicKeyword {
@@ -25,10 +49,10 @@ class FindPublicAndOpenExports: SyntaxVisitorBase {
     if mod.name.text == "open" {
       return true
     }
-    
+
     return false
   }
-  
+
   override func visit(_ node: ClassDeclSyntax) -> SyntaxVisitorContinueKind {
     if node.modifiers?.contains(where: isPublic) == true {
       replace.insert(node.identifier.text)
@@ -36,7 +60,7 @@ class FindPublicAndOpenExports: SyntaxVisitorBase {
 
     return .skipChildren
   }
-  
+
   override func visit(_ node: EnumDeclSyntax) -> SyntaxVisitorContinueKind {
     if node.modifiers?.contains(where: isPublic) == true {
       replace.insert(node.identifier.text)
@@ -44,7 +68,7 @@ class FindPublicAndOpenExports: SyntaxVisitorBase {
 
     return .skipChildren
   }
-  
+
   override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
     if node.modifiers?.contains(where: isPublic) == true {
       replace.insert(node.identifier.text)
@@ -52,15 +76,17 @@ class FindPublicAndOpenExports: SyntaxVisitorBase {
 
     return .skipChildren
   }
-  
+
   override func visit(_ node: FunctionDeclSyntax) -> SyntaxVisitorContinueKind {
-    if node.modifiers?.contains(where: isPublic) == true {
-      replace.insert(node.identifier.text)
+    guard node.modifiers?.contains(where: isPublic) == true else {
+      return .skipChildren
     }
+
+    fnReplace.insert(SLRFuncReport(identifier: node.identifier.text, signature: node.signature.description))
 
     return .skipChildren
   }
-  
+
   override func visit(_ node: ProtocolDeclSyntax) -> SyntaxVisitorContinueKind {
     if node.modifiers?.contains(where: isPublic) == true {
       replace.insert(node.identifier.text)
@@ -72,7 +98,15 @@ class FindPublicAndOpenExports: SyntaxVisitorBase {
   override func visit(_ node: ExtensionDeclSyntax) -> SyntaxVisitorContinueKind {
     return .skipChildren
   }
-  
+
+  override func visit(_ node: OperatorDeclSyntax) -> SyntaxVisitorContinueKind {
+    if node.modifiers?.contains(where: isPublic) == true {
+      exclude.insert(node.identifier.text)
+    }
+
+    return .skipChildren
+  }
+
   override func visit(_ node: VariableDeclSyntax) -> SyntaxVisitorContinueKind {
     if node.modifiers?.contains(where: isPublic) == true {
       replace.insert(node.letOrVarKeyword.nextToken!.text)
@@ -84,42 +118,62 @@ class FindPublicAndOpenExports: SyntaxVisitorBase {
 
 class SLRPublicRewriter: SyntaxRewriter {
   let identifiers: Set<String>!
+  let fnIdentifiers: Set<SLRFuncReport>!
   let prefix: String!
-  
-  init(ids: Set<String>, prefix: String) {
+
+  init(ids: Set<String>, prefix: String, fnIdentifiers: Set<SLRFuncReport>) {
     self.identifiers = ids
     self.prefix = prefix
+    self.fnIdentifiers = fnIdentifiers
   }
-  
+
   override func visit(_ token: TokenSyntax) -> Syntax {
     guard case .identifier(let node) = token.tokenKind else {
-      return token
-    }
-    
-    guard identifiers.contains(node) else {
-      return token
+      return super.visit(token)
     }
 
-    return token.withKind(.identifier(prefix + node))
+    if identifiers.contains(node) {
+      return super.visit(token.withKind(.identifier(prefix + node)))
+    }
+
+    return super.visit(token)
+  }
+
+  override func visit(_ node: FunctionDeclSyntax) -> DeclSyntax {
+    guard fnIdentifiers.contains(where: { $0.identifier == node.identifier.text && $0.signature == node.signature.description }) else {
+      return super.visit(node)
+    }
+
+    return super.visit(node.withIdentifier(node.identifier.withKind(.identifier(prefix + node.identifier.text))))
   }
 }
 
 func rewrite(_ urls: [URL],
              prefix: String,
-             reports: [SLRIdentifiersReport]? = nil) throws -> (syntax: [Syntax], identifiers: Set<String>) {
+             reports: [SLRIdentifiersReport]? = nil) throws -> (syntax: [Syntax], identifiers: Set<String>, fnReplace: Set<SLRFuncReport>) {
   var sources = [SourceFileSyntax]()
   var response = [Syntax]()
   var syntaxVisitor = FindPublicAndOpenExports()
-  
+
   for url in urls {
     let sourceFile = try SyntaxParser.parse(url)
     sourceFile.walk(&syntaxVisitor)
     sources.append(sourceFile)
   }
-  
-  let baseRewriter = SLRPublicRewriter(ids: syntaxVisitor.replace, prefix: prefix)
+
+  // removes exclusions
+  syntaxVisitor.fnReplace = syntaxVisitor.fnReplace.filter {
+    !syntaxVisitor.exclude.contains($0.identifier)
+  }
+
+  let baseRewriter = SLRPublicRewriter(ids: syntaxVisitor.replace,
+                                       prefix: prefix,
+                                       fnIdentifiers: syntaxVisitor.fnReplace)
+
   let rewriters = reports?.reduce(into: [baseRewriter], { res, rep in
-    res.append(SLRPublicRewriter(ids: Set(rep.identifiers), prefix: rep.prefix))
+    res.append(SLRPublicRewriter(ids: Set(rep.identifiers),
+                                 prefix: rep.prefix,
+                                 fnIdentifiers: Set(rep.fnReplace)))
   }) ?? [baseRewriter]
 
   for idx in urls.indices {
@@ -130,5 +184,5 @@ func rewrite(_ urls: [URL],
     response.insert(syntax, at: idx)
   }
 
-  return (response, syntaxVisitor.replace)
+  return (response, syntaxVisitor.replace, syntaxVisitor.fnReplace)
 }

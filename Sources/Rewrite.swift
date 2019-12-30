@@ -21,7 +21,8 @@ struct Rewrite: Command {
   private let prefix: OptionArgument<String>
   private let report: OptionArgument<String>
   private let includes: OptionArgument<[String]>
-  
+  private let inplace: OptionArgument<Bool>
+
   init(parser: ArgumentParser) {
     let parser = parser.add(subparser: command, overview: overview)
 
@@ -49,6 +50,11 @@ struct Rewrite: Command {
                           shortName: "-i",
                           kind: [String].self,
                           usage: "rewrite ids from these reports")
+
+    inplace = parser.add(option: "--in-place",
+                         shortName: "-o",
+                         kind: Bool.self,
+                         usage: "rewrites files in-place")
   }
 
   func run(with arguments: ArgumentParser.Result) throws {
@@ -56,23 +62,26 @@ struct Rewrite: Command {
     let output = arguments.get(self.outputDirectory)!
     let prefix = arguments.get(self.prefix)!
     let includes = arguments.get(self.includes)
-    
+    let inplace = arguments.get(self.inplace) ?? false
+
     guard let inputDir = Path(input), inputDir.isDirectory else {
       throw NSError(domain: "E_DIR_IN", code: 404, userInfo: ["path": input])
     }
-    
+
     guard let outputDir = Path(output), outputDir.isDirectory else {
       throw NSError(domain: "E_DIR_OUT", code: 404, userInfo: ["path": output])
     }
 
-    print("cleaning files in \(outputDir.description)")
-    for content in outputDir.ls() {
-      try content.delete()
+    if !inplace {
+      print("cleaning files in \(outputDir.description)")
+      for content in outputDir.ls() {
+        try content.delete()
+      }
     }
-    
+
     print("copying files over to \(outputDir.description)")
     for content in inputDir.ls() {
-      try content.copy(into: outputDir)
+      try content.copy(into: outputDir, overwrite: inplace)
     }
 
     var reports = [SLRIdentifiersReport]()
@@ -88,7 +97,7 @@ struct Rewrite: Command {
         reports.append(try decoder.decode(SLRIdentifiersReport.self, from: contents))
       }
     }
-    
+
     let paths = inputDir.find().extension("swift").type(.file).map { $0 }
     let urls = paths.map { $0.url }
     let processed = try rewrite(urls, prefix: prefix, reports: reports)
@@ -103,7 +112,9 @@ struct Rewrite: Command {
 
     if let identifiersReport = arguments.get(self.report) {
       let reportFile = Path(identifiersReport) ?? Path.cwd/identifiersReport
-      let report = SLRIdentifiersReport(prefix: prefix, identifiers: Array(processed.identifiers))
+      let report = SLRIdentifiersReport(prefix: prefix,
+                                        identifiers: Array(processed.identifiers),
+                                        fnReplace: Array(processed.fnReplace))
       let encodedData = try JSONEncoder().encode(report)
       try encodedData.write(to: reportFile)
 
@@ -111,4 +122,3 @@ struct Rewrite: Command {
     }
   }
 }
-
