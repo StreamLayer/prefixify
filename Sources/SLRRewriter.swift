@@ -18,6 +18,7 @@ struct SLRIdentifiersReport: Codable {
   let prefix: String
   let identifiers: [String]
   let fnReplace: [SLRFuncReport]
+  let products: [String]?
 }
 
 class FindPublicAndOpenExports: SyntaxVisitorBase {

@@ -22,6 +22,7 @@ struct Rewrite: Command {
   private let report: OptionArgument<String>
   private let includes: OptionArgument<[String]>
   private let inplace: OptionArgument<Bool>
+  private let products: OptionArgument<[String]>
 
   init(parser: ArgumentParser) {
     let parser = parser.add(subparser: command, overview: overview)
@@ -55,6 +56,11 @@ struct Rewrite: Command {
                          shortName: "-o",
                          kind: Bool.self,
                          usage: "rewrites files in-place")
+    
+    products = parser.add(option: "--product-name",
+                          shortName: "-n",
+                          kind: [String].self,
+                          usage: "adds product names in the reports")
   }
 
   func run(with arguments: ArgumentParser.Result) throws {
@@ -112,9 +118,11 @@ struct Rewrite: Command {
 
     if let identifiersReport = arguments.get(self.report) {
       let reportFile = Path(identifiersReport) ?? Path.cwd/identifiersReport
+      let productNames = arguments.get(self.products) ?? []
       let report = SLRIdentifiersReport(prefix: prefix,
                                         identifiers: Array(processed.identifiers),
-                                        fnReplace: Array(processed.fnReplace))
+                                        fnReplace: Array(processed.fnReplace),
+                                        products: productNames)
       let encodedData = try JSONEncoder().encode(report)
       try encodedData.write(to: reportFile)
 
