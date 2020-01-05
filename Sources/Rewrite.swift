@@ -129,7 +129,7 @@ struct Rewrite: Command {
       .reduce(into: Set(productNames), { $0.insert($1) })
 
     let headers = inputDir.find().extension("h").type(.file).filter {
-      moduleNames.contains($0.basename())
+      moduleNames.contains($0.basename(dropExtension: true))
     }
 
     // rename headers, which match any of the module names
