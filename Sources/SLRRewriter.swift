@@ -146,6 +146,10 @@ class SLRPublicRewriter: SyntaxRewriter {
     return super.visit(token)
   }
 
+  override func visit(_ node: ObjcNameSyntax) -> Syntax {
+    return super.visit(node)
+  }
+
   override func visit(_ node: FunctionDeclSyntax) -> DeclSyntax {
     guard fnIdentifiers.contains(where: { $0.identifier == node.identifier.text && $0.signature == node.signature.description }) else {
       return super.visit(node)
@@ -191,6 +195,10 @@ func rewrite(
     // removes exclusions
     syntaxVisitor.fnReplace = syntaxVisitor.fnReplace.filter {
       !syntaxVisitor.exclude.contains($0.identifier)
+    }
+
+    syntaxVisitor.replace = syntaxVisitor.replace.filter {
+      !syntaxVisitor.exclude.contains($0)
     }
 
     let baseRewriter = SLRPublicRewriter(ids: syntaxVisitor.replace,
