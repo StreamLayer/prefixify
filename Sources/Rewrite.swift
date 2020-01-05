@@ -124,6 +124,20 @@ struct Rewrite: Command {
       try writeTo.close()
     }
 
+    let moduleNames = reports
+      .flatMap { $0.products ?? [] }
+      .reduce(into: Set(productNames), { $0.insert($1) })
+
+    let headers = inputDir.find().extension("h").type(.file).filter {
+      moduleNames.contains($0.basename())
+    }
+
+    // rename headers, which match any of the module names
+    for header in headers {
+      let output = header.path(relativeTo: inputDir, in: outputDir)
+      try output.rename(to: prefix + output.basename())
+    }
+
     if let identifiersReport = arguments.get(self.report) {
       let reportFile = Path(identifiersReport) ?? Path.cwd/identifiersReport
       let report = SLRIdentifiersReport(prefix: prefix,

@@ -13,6 +13,10 @@ extension Path {
     let absolutePath = outputDir.join(relative(to: base)).url.relativePath
     return try AbsolutePath(validating: absolutePath)
   }
+  
+  func path(relativeTo base: Path, in outputDir: Path) -> Path {
+    return outputDir.join(relative(to: base))
+  }
 }
 
 extension AbsolutePath {
