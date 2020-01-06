@@ -83,21 +83,45 @@ class FindPublicAndOpenExports: SyntaxVisitorBase {
     guard node.modifiers?.contains(where: isPublic) == true else {
       return .skipChildren
     }
-
-    fnReplace.insert(SLRFuncReport(
-      identifier: node.identifier.text,
-      signature: node.signature.description,
-      args: node.signature.input.parameterList.map({ param in
-        switch param.firstName?.tokenKind {
-        case .identifier(let name):
-          return name
-        case .wildcardKeyword:
-          return nil
-        default:
-          fatalError("unexpected token kind")
+    
+    let paramList = node.signature.input.parameterList
+    var argPairs: [[String?]] = [[]]
+    
+    paramList.forEach { param in
+      switch param.firstName?.tokenKind {
+      case .identifier(let name):
+        for idx in argPairs.indices {
+          var el = argPairs[idx]
+          el.append(name)
+          argPairs[idx] = el
         }
-      })
-    ))
+      case .wildcardKeyword:
+        for idx in argPairs.indices {
+          var el = argPairs[idx]
+          el.append(nil)
+          argPairs[idx] = el
+        }
+      default:
+        fatalError("unexpected token kind")
+      }
+      
+      guard param.defaultArgument != nil else {
+        return
+      }
+
+      // duplicate as this param is optional
+      for idx in argPairs.indices {
+        argPairs.append(argPairs[idx].dropLast())
+      }
+    }
+
+    for args in argPairs {
+      fnReplace.insert(SLRFuncReport(
+        identifier: node.identifier.text,
+        signature: node.signature.description,
+        args: args
+      ))
+    }
 
     return .skipChildren
   }
@@ -185,15 +209,23 @@ class SLRPublicRewriter: SyntaxRewriter {
         default:
           contains = false
         }
-
+        
         if !contains {
           break
         }
       }
 
-      if contains {
-        return super.visit(node)
+      guard contains else {
+        continue
       }
+      
+      if node.trailingClosure != nil, fnDeclaration.args.count != node.argumentList.count + 1 {
+        continue
+      } else if fnDeclaration.args.count != node.argumentList.count {
+        continue
+      }
+        
+      return super.visit(node)
     }
 
     return node
