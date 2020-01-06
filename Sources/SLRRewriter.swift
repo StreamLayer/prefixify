@@ -12,6 +12,7 @@ import Foundation
 struct SLRFuncReport: Codable, Hashable {
   let identifier: String
   let signature: String
+  let args: [String?]
 }
 
 struct SLRIdentifiersReport: Codable {
@@ -83,7 +84,20 @@ class FindPublicAndOpenExports: SyntaxVisitorBase {
       return .skipChildren
     }
 
-    fnReplace.insert(SLRFuncReport(identifier: node.identifier.text, signature: node.signature.description))
+    fnReplace.insert(SLRFuncReport(
+      identifier: node.identifier.text,
+      signature: node.signature.description,
+      args: node.signature.input.parameterList.map({ param in
+        switch param.firstName?.tokenKind {
+        case .identifier(let name):
+          return name
+        case .wildcardKeyword:
+          return nil
+        default:
+          fatalError("unexpected token kind")
+        }
+      })
+    ))
 
     return .skipChildren
   }
@@ -142,8 +156,47 @@ class SLRPublicRewriter: SyntaxRewriter {
     if imports.contains(node) {
       return super.visit(token.withKind(.identifier(prefix + node)))
     }
+    
+    if fnIdentifiers.contains(where: { $0.identifier == node }) {
+      return super.visit(token.withKind(.identifier(prefix + node)))
+    }
 
     return super.visit(token)
+  }
+  
+  override func visit(_ node: FunctionCallExprSyntax) -> ExprSyntax {
+    guard case .identifier(let name) = node.leftParen?.previousToken?.tokenKind else {
+      return super.visit(node)
+    }
+
+    let functions = fnIdentifiers.filter { $0.identifier == name }
+    guard functions.count > 0 else {
+      return super.visit(node)
+    }
+
+    for fnDeclaration in functions {
+      var contains = true
+      for (idx, arg) in node.argumentList.enumerated() {
+        switch arg.label?.tokenKind {
+        case .identifier(let name):
+          contains = fnDeclaration.args[idx] == name
+        case .wildcardKeyword:
+          contains = fnDeclaration.args[idx] == nil
+        default:
+          contains = false
+        }
+
+        if !contains {
+          break
+        }
+      }
+
+      if contains {
+        return super.visit(node)
+      }
+    }
+
+    return node
   }
 
   override func visit(_ node: ObjcNameSyntax) -> Syntax {
