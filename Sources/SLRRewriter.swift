@@ -204,7 +204,7 @@ class SLRPublicRewriter: SyntaxRewriter {
         switch arg.label?.tokenKind {
         case .identifier(let name):
           contains = fnDeclaration.args[idx] == name
-        case .wildcardKeyword:
+        case .wildcardKeyword, nil:
           contains = fnDeclaration.args[idx] == nil
         default:
           contains = false
@@ -218,13 +218,13 @@ class SLRPublicRewriter: SyntaxRewriter {
       guard contains else {
         continue
       }
-      
+
       if node.trailingClosure != nil, fnDeclaration.args.count != node.argumentList.count + 1 {
         continue
-      } else if fnDeclaration.args.count != node.argumentList.count {
+      } else if node.trailingClosure == nil, fnDeclaration.args.count != node.argumentList.count {
         continue
       }
-        
+
       return super.visit(node)
     }
 

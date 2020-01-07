@@ -57,12 +57,12 @@ struct Rewrite: Command {
                          shortName: "-o",
                          kind: Bool.self,
                          usage: "rewrites files in-place")
-    
+
     products = parser.add(option: "--product-name",
                           shortName: "-n",
                           kind: [String].self,
                           usage: "adds product names in the reports")
-    
+
     exclude = parser.add(option: "--exclude",
                          shortName: "-e",
                          kind: [String].self,
