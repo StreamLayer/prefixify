@@ -24,6 +24,7 @@ struct Rewrite: Command {
   private let inplace: OptionArgument<Bool>
   private let products: OptionArgument<[String]>
   private let exclude: OptionArgument<[String]>
+  private let noBase: OptionArgument<Bool>
 
   init(parser: ArgumentParser) {
     let parser = parser.add(subparser: command, overview: overview)
@@ -66,7 +67,11 @@ struct Rewrite: Command {
     exclude = parser.add(option: "--exclude",
                          shortName: "-e",
                          kind: [String].self,
-                        usage: "exclude identifiers to be transformed")
+                         usage: "exclude identifiers to be transformed")
+    
+    noBase = parser.add(option: "--reports-only",
+                        kind: Bool.self,
+                        usage: "rewrite only based on the reports")
   }
 
   func run(with arguments: ArgumentParser.Result) throws {
@@ -77,6 +82,7 @@ struct Rewrite: Command {
     let inplace = arguments.get(self.inplace) ?? false
     let exclude = arguments.get(self.exclude) ?? []
     let productNames = arguments.get(self.products) ?? []
+    let noBase = arguments.get(self.noBase) ?? false
 
     guard let inputDir = Path(input), inputDir.isDirectory else {
       throw NSError(domain: "E_DIR_IN", code: 404, userInfo: ["path": input])
@@ -114,7 +120,11 @@ struct Rewrite: Command {
 
     let paths = inputDir.find().extension("swift").type(.file).map { $0 }
     let urls = paths.map { $0.url }
-    let processed = try rewrite(urls, prefix: prefix, reports: reports, exclude: exclude, products: productNames)
+    let processed = try rewrite(urls, prefix: prefix,
+                                reports: reports,
+                                exclude: exclude,
+                                products: productNames,
+                                noBaseRewriter: noBase)
 
     for (idx, syntax) in processed.syntax.enumerated() {
       let path = paths[idx]

@@ -261,7 +261,8 @@ func rewrite(
   prefix: String,
   reports: [SLRIdentifiersReport]? = nil,
   exclude: [String]? = nil,
-  products: [String]? = nil
+  products: [String]? = nil,
+  noBaseRewriter: Bool = false
 ) throws -> (syntax: [Syntax], identifiers: Set<String>, fnReplace: Set<SLRFuncReport>) {
     var sources = [SourceFileSyntax]()
     var response = [Syntax]()
@@ -286,10 +287,12 @@ func rewrite(
       !syntaxVisitor.exclude.contains($0)
     }
 
-    let baseRewriter = SLRPublicRewriter(ids: syntaxVisitor.replace,
-                                         prefix: prefix,
-                                         fnIdentifiers: syntaxVisitor.fnReplace,
-                                         imports: products ?? [])
+    let baseRewriter = noBaseRewriter
+      ? SLRPublicRewriter(ids: [], prefix: "", fnIdentifiers: [], imports: [])
+      : SLRPublicRewriter(ids: syntaxVisitor.replace,
+                        prefix: prefix,
+                        fnIdentifiers: syntaxVisitor.fnReplace,
+                        imports: products ?? [])
 
     let rewriters = reports?.reduce(into: [baseRewriter], { res, rep in
       res.append(SLRPublicRewriter(ids: Set(rep.identifiers),
