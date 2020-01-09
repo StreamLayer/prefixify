@@ -12,7 +12,7 @@ import Foundation
 struct SLRFuncReport: Codable, Hashable {
   let identifier: String
   let signature: String
-  let args: [String?]
+  let args: [String?]?
 }
 
 struct SLRIdentifiersReport: Codable {
@@ -199,13 +199,17 @@ class SLRPublicRewriter: SyntaxRewriter {
     }
 
     for fnDeclaration in functions {
+      guard let args = fnDeclaration.args else {
+        continue
+      }
+
       var contains = true
       for (idx, arg) in node.argumentList.enumerated() {
         switch arg.label?.tokenKind {
         case .identifier(let name):
-          contains = fnDeclaration.args[idx] == name
+          contains = args[idx] == name
         case .wildcardKeyword, nil:
-          contains = fnDeclaration.args[idx] == nil
+          contains = args[idx] == nil
         default:
           contains = false
         }
@@ -219,9 +223,9 @@ class SLRPublicRewriter: SyntaxRewriter {
         continue
       }
 
-      if node.trailingClosure != nil, fnDeclaration.args.count != node.argumentList.count + 1 {
+      if node.trailingClosure != nil, args.count != node.argumentList.count + 1 {
         continue
-      } else if node.trailingClosure == nil, fnDeclaration.args.count != node.argumentList.count {
+      } else if node.trailingClosure == nil, args.count != node.argumentList.count {
         continue
       }
 
