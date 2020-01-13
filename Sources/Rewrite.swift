@@ -12,6 +12,20 @@ import Path
 
 private let fileManager = FileManager.default
 
+struct Rename {
+  let token: String
+  let prefix: String
+  
+  init(raw: String) {
+    let contents = raw.split(separator: ":")
+    
+    precondition(contents.count == 2, "rename token must be in the form of `prefix:token`")
+    
+    self.prefix = String(contents[0])
+    self.token = String(contents[1])
+  }
+}
+
 struct Rewrite: Command {
   let command = "rewrite"
   let overview = "rewrites public & open identifiers in a given folder"
@@ -25,6 +39,7 @@ struct Rewrite: Command {
   private let products: OptionArgument<[String]>
   private let exclude: OptionArgument<[String]>
   private let noBase: OptionArgument<Bool>
+  private let rewrites: OptionArgument<[String]>
 
   init(parser: ArgumentParser) {
     let parser = parser.add(subparser: command, overview: overview)
@@ -72,6 +87,11 @@ struct Rewrite: Command {
     noBase = parser.add(option: "--reports-only",
                         kind: Bool.self,
                         usage: "rewrite only based on the reports")
+
+    rewrites = parser.add(option: "--rewrite",
+                          shortName: "-r",
+                          kind: [String].self,
+                          usage: "add manual token rename")
   }
 
   func run(with arguments: ArgumentParser.Result) throws {
@@ -83,6 +103,7 @@ struct Rewrite: Command {
     let exclude = arguments.get(self.exclude) ?? []
     let productNames = arguments.get(self.products) ?? []
     let noBase = arguments.get(self.noBase) ?? false
+    let rewrites: [Rename] = (arguments.get(self.rewrites) ?? []).map { Rename(raw: $0) }
 
     guard let inputDir = Path(input), inputDir.isDirectory else {
       throw NSError(domain: "E_DIR_IN", code: 404, userInfo: ["path": input])
@@ -116,6 +137,12 @@ struct Rewrite: Command {
         let contents = try Data(contentsOf: path)
         reports.append(try decoder.decode(SLRIdentifiersReport.self, from: contents))
       }
+    }
+
+    if rewrites.count > 0 {
+      reports.append(contentsOf: rewrites.map {
+        SLRIdentifiersReport(prefix: "\($0.prefix)_", identifiers: [$0.token], fnReplace: [], products: [])
+      })
     }
 
     let paths = inputDir.find().extension("swift").type(.file).map { $0 }
