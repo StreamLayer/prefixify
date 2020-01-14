@@ -199,7 +199,7 @@ class SLRPublicRewriter: SyntaxRewriter {
     }
 
     for fnDeclaration in functions {
-      guard let args = fnDeclaration.args else {
+      guard let args = fnDeclaration.args, args.count >= node.argumentList.count else {
         continue
       }
 
